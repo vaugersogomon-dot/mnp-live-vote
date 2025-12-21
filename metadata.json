@@ -1,0 +1,7 @@
+{
+  "name": "LiveVote - Online Voting Platform",
+  "description": "A real-time voting system where admins can create participants, generate QR codes for voters, and watch results live with beautiful data visualizations.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
