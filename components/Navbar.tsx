@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { AppView } from '../types';
+import { AppView } from '../types.ts';
 import { Settings, Users, BarChart3, Vote } from 'lucide-react';
 
 interface NavbarProps {
@@ -46,7 +46,6 @@ export const Navbar: React.FC<NavbarProps> = ({ currentView, setView }) => {
           </button>
         </div>
 
-        {/* Mobile quick view */}
         <div className="md:hidden flex items-center gap-4">
              <button onClick={() => { window.location.hash = 'vote'; setView(AppView.VOTE); }} className="p-2 text-indigo-600 bg-indigo-50 rounded-lg">
                 <Vote className="w-5 h-5" />

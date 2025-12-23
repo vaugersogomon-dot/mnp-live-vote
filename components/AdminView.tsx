@@ -1,8 +1,8 @@
 
 import React, { useState, useRef } from 'react';
-import { Participant } from '../types';
+import { Participant } from '../types.ts';
 import { QRCodeSVG } from 'qrcode.react';
-import { Plus, Trash2, Link as LinkIcon, RefreshCcw, QrCode, Image as ImageIcon, Loader2, Download, Copy, CheckCircle2, Globe, Info } from 'lucide-react';
+import { Plus, Trash2, RefreshCcw, QrCode, Loader2, Download, Copy, CheckCircle2, Info, AlertTriangle } from 'lucide-react';
 
 interface AdminViewProps {
   participants: Participant[];
@@ -25,8 +25,6 @@ export const AdminView: React.FC<AdminViewProps> = ({
   const [processedCount, setProcessedCount] = useState(0);
   const [copied, setCopied] = useState(false);
   
-  // Detection for GitHub Pages: window.location.origin + window.location.pathname
-  // This handles sub-folders like /repo-name/ correctly.
   const getDefaultBaseUrl = () => {
     const url = window.location.origin + window.location.pathname;
     return url.endsWith('/') ? url : url + '/';
@@ -70,7 +68,8 @@ export const AdminView: React.FC<AdminViewProps> = ({
     if (!files || files.length === 0) return;
     setIsProcessing(true);
     setProcessedCount(0);
-    const fileArray = Array.from(files);
+    // Fix: Explicitly cast to File[] to avoid 'unknown' type error on line 74
+    const fileArray = Array.from(files) as File[];
     let currentTotal = participants.length;
     for (let i = 0; i < fileArray.length; i++) {
       const compressed = await compressImage(fileArray[i]);
@@ -109,6 +108,14 @@ export const AdminView: React.FC<AdminViewProps> = ({
 
   return (
     <div className="max-w-6xl mx-auto space-y-8 animate-in fade-in duration-500 pb-20">
+      <div className="bg-amber-50 border-l-4 border-amber-400 p-4 rounded-r-xl flex gap-3 shadow-sm">
+        <AlertTriangle className="w-6 h-6 text-amber-500 shrink-0" />
+        <div className="text-sm text-amber-800">
+          <p className="font-bold">Внимание для GitHub Pages:</p>
+          <p>Данные хранятся <strong>только в вашем браузере</strong>. Для полноценной работы между разными устройствами требуется облачная база данных.</p>
+        </div>
+      </div>
+
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 bg-white p-8 rounded-3xl border shadow-sm">
         <div className="space-y-1">
           <h1 className="text-3xl font-black text-slate-900 tracking-tight">Админ-панель</h1>
@@ -125,10 +132,6 @@ export const AdminView: React.FC<AdminViewProps> = ({
             <RefreshCcw className="w-4 h-4" />
             Сбросить всё
           </button>
-          <div className="flex items-center gap-3 px-4 py-2 bg-emerald-50 rounded-xl border border-emerald-100">
-            <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></div>
-            <p className="text-sm font-bold text-emerald-700">Online</p>
-          </div>
         </div>
       </div>
 
@@ -149,7 +152,7 @@ export const AdminView: React.FC<AdminViewProps> = ({
                   <Plus className="w-8 h-8" />
                 </div>
                 <h3 className="text-3xl font-black text-slate-900 mb-2">Загрузить пачкой</h3>
-                <p className="text-slate-500 text-lg mb-8">Система сама пронумерует участников</p>
+                <p className="text-slate-500 text-lg mb-8">Выберите фото участников</p>
                 <div className="inline-flex items-center gap-2 px-8 py-4 bg-indigo-600 text-white rounded-2xl font-black shadow-lg">
                   Выбрать файлы
                 </div>
@@ -186,7 +189,7 @@ export const AdminView: React.FC<AdminViewProps> = ({
               </button>
               <div className="p-4 bg-white/5 rounded-2xl border border-white/10 space-y-2 text-left">
                 <div className="flex items-center justify-between">
-                   <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Публичный URL</p>
+                   <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Ссылка для QR</p>
                    <button onClick={copyToClipboard} className="text-indigo-400 hover:text-white transition-colors">
                       {copied ? <CheckCircle2 className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
                    </button>
@@ -199,19 +202,6 @@ export const AdminView: React.FC<AdminViewProps> = ({
                 />
               </div>
             </div>
-          </div>
-
-          <div className="bg-indigo-50 p-6 rounded-3xl border border-indigo-100 flex gap-4">
-             <div className="w-10 h-10 shrink-0 bg-indigo-100 rounded-xl flex items-center justify-center text-indigo-600">
-                <Info className="w-5 h-5" />
-             </div>
-             <div className="space-y-1">
-                <p className="text-sm font-bold text-indigo-900">Совет по GitHub Pages</p>
-                <p className="text-xs text-indigo-700 leading-relaxed">
-                  После публикации репозитория, убедитесь, что URL выше совпадает с адресом вашего сайта. 
-                  Если вы открыли админку по ссылке GitHub, всё настроится автоматически.
-                </p>
-             </div>
           </div>
         </div>
       </div>
