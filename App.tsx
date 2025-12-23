@@ -1,10 +1,10 @@
 
 import React, { useState, useEffect } from 'react';
-import { AdminView } from './components/AdminView';
-import { VoterView } from './components/VoterView';
-import { LeaderboardView } from './components/LeaderboardView';
-import { Navbar } from './components/Navbar';
-import { AppView, Participant } from './types';
+import { AdminView } from './components/AdminView.tsx';
+import { VoterView } from './components/VoterView.tsx';
+import { LeaderboardView } from './components/LeaderboardView.tsx';
+import { Navbar } from './components/Navbar.tsx';
+import { AppView, Participant } from './types.ts';
 
 const STORAGE_KEY = 'live_vote_state';
 
