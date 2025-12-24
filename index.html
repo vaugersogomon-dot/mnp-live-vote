@@ -64,6 +64,26 @@
         .material-card:hover {
             box-shadow: 0 1px 2px 0 rgba(60,64,67,0.3), 0 1px 3px 1px rgba(60,64,67,0.15);
         }
+        .confetti-container {
+            position: fixed;
+            inset: 0;
+            overflow: hidden;
+            pointer-events: none;
+            z-index: 50;
+        }
+        .confetti-piece {
+            position: absolute;
+            top: -10vh;
+            width: 10px;
+            height: 16px;
+            border-radius: 4px;
+            animation: fall linear forwards;
+            transform: rotate(15deg);
+        }
+        @keyframes fall {
+            0% { transform: translate3d(0, -10vh, 0) rotate(0deg); }
+            100% { transform: translate3d(0, 110vh, 0) rotate(260deg); }
+        }
     </style>
 </head>
 <body>
@@ -94,7 +114,42 @@
         const { useState, useEffect, useMemo, useRef } = React;
         const { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } = Recharts;
 
-        const AppView = { ADMIN: 'admin', VOTE: 'vote', LEADERBOARD: 'leaderboard' };
+        const AppView = { ADMIN: 'admin', VOTE: 'vote', LEADERBOARD: 'leaderboard', WINNER: 'winner' };
+
+        const compressImage = async (file, maxSize = 320 * 1024, maxDimension = 1400) => {
+            const dataUrl = await new Promise((resolve) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(reader.result);
+                reader.readAsDataURL(file);
+            });
+
+            const img = await new Promise((resolve, reject) => {
+                const image = new Image();
+                image.onload = () => resolve(image);
+                image.onerror = reject;
+                image.src = dataUrl;
+            });
+
+            const canvas = document.createElement('canvas');
+            let { width, height } = img;
+            if (width > maxDimension || height > maxDimension) {
+                const ratio = Math.min(maxDimension / width, maxDimension / height);
+                width = width * ratio;
+                height = height * ratio;
+            }
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, width, height);
+
+            let quality = 0.9;
+            let output = canvas.toDataURL('image/jpeg', quality);
+            while (output.length * 0.75 > maxSize && quality > 0.4) { // rough base64->bytes conversion
+                quality -= 0.05;
+                output = canvas.toDataURL('image/jpeg', quality);
+            }
+            return output;
+        };
 
         // Универсальный компонент иконок (Lucide UMD)
         const Icon = ({ name, className = "w-5 h-5" }) => {
@@ -139,14 +194,18 @@
                 }
             };
 
-            const handleFile = (e) => {
+            const handleFile = async (e) => {
                 const files = e.target.files;
                 if (!files) return;
-                Array.from(files).forEach(file => {
-                    const reader = new FileReader();
-                    reader.onload = (ev) => onAdd(`Участник`, ev.target.result);
-                    reader.readAsDataURL(file);
-                });
+                for (const file of Array.from(files)) {
+                    try {
+                        const compressed = await compressImage(file);
+                        onAdd(`Участник`, compressed);
+                    } catch (err) {
+                        console.error('Ошибка сжатия', err);
+                    }
+                }
+                e.target.value = '';
             };
 
             return (
@@ -199,16 +258,20 @@
             );
         };
 
-        const VoterView = ({ participants, onVote, hasVoted, sessionTitle }) => {
+        const VoterView = ({ participants, onVote, sessionTitle }) => {
             const [selected, setSelected] = useState(null);
-            if (hasVoted) return (
-                <div className="max-w-md mx-auto text-center py-24 px-6 fade-in">
-                    <div className="w-20 h-20 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-6"><Icon name="check" className="w-10 h-10" /></div>
-                    <h2 className="text-3xl font-bold mb-4">Спасибо!</h2>
-                    <p className="text-gray-500 mb-8">Ваш голос принят. Результаты обновляются в реальном времени.</p>
-                    <button onClick={() => window.location.hash = 'results'} className="w-full py-4 bg-blue-600 text-white rounded-full font-bold shadow-lg">РЕЗУЛЬТАТЫ</button>
-                </div>
-            );
+            const [justVoted, setJustVoted] = useState(false);
+
+            if (!participants.length) {
+                return (
+                    <div className="max-w-xl mx-auto text-center py-24 px-6 space-y-4">
+                        <Icon name="users" className="w-14 h-14 text-gray-300 mx-auto" />
+                        <h2 className="text-3xl font-bold">Участников пока нет</h2>
+                        <p className="text-gray-500">Попросите администратора загрузить фото, чтобы начать голосование.</p>
+                    </div>
+                );
+            }
+
             return (
                 <div className="max-w-4xl mx-auto p-6 pb-32 pt-10">
                     <h1 className="text-4xl font-bold text-center mb-10">{sessionTitle}</h1>
@@ -224,8 +287,13 @@
                         ))}
                     </div>
                     <div className="fixed bottom-10 left-0 right-0 px-6 flex justify-center z-50">
-                        <button disabled={!selected} onClick={() => onVote(selected)} className={`w-full max-w-md py-5 rounded-full font-bold text-xl shadow-2xl transition-all ${selected ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-400'}`}>ГОЛОСОВАТЬ</button>
+                        <button disabled={!selected} onClick={() => { onVote(selected); setSelected(null); setJustVoted(true); setTimeout(() => setJustVoted(false), 2200); }} className={`w-full max-w-md py-5 rounded-full font-bold text-xl shadow-2xl transition-all ${selected ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-400'}`}>ГОЛОСОВАТЬ</button>
                     </div>
+                    {justVoted && <div className="fixed bottom-28 left-0 right-0 flex justify-center">
+                        <div className="bg-white shadow-xl border px-4 py-2 rounded-full text-sm font-bold text-blue-600 flex items-center gap-2">
+                            <Icon name="party-popper" /> Голос засчитан! Можно голосовать ещё раз
+                        </div>
+                    </div>}
                 </div>
             );
         };
@@ -267,10 +335,76 @@
             );
         };
 
+        const Confetti = () => {
+            const containerRef = useRef(null);
+            useEffect(() => {
+                const colors = ['#4285F4', '#EA4335', '#FBBC05', '#34A853'];
+                const spawn = () => {
+                    if (!containerRef.current) return;
+                    const piece = document.createElement('div');
+                    piece.className = 'confetti-piece';
+                    piece.style.background = colors[Math.floor(Math.random() * colors.length)];
+                    piece.style.left = Math.random() * 100 + 'vw';
+                    piece.style.animationDuration = 3 + Math.random() * 2 + 's';
+                    piece.style.opacity = Math.random() * 0.8 + 0.2;
+                    containerRef.current.appendChild(piece);
+                    setTimeout(() => piece.remove(), 5000);
+                };
+                const interval = setInterval(spawn, 80);
+                for (let i = 0; i < 80; i++) spawn();
+                return () => clearInterval(interval);
+            }, []);
+            return <div ref={containerRef} className="confetti-container pointer-events-none"></div>;
+        };
+
+        const WinnerView = ({ participants, sessionTitle }) => {
+            const sorted = useMemo(() => [...participants].sort((a, b) => b.votes - a.votes), [participants]);
+            if (!sorted.length) return (
+                <div className="min-h-screen flex flex-col items-center justify-center text-center p-6">
+                    <Icon name="trophy" className="w-16 h-16 text-gray-300 mb-4" />
+                    <h2 className="text-3xl font-bold mb-2">Добавьте участников</h2>
+                    <p className="text-gray-500">Чтобы увидеть победителя, загрузите фото в админке.</p>
+                </div>
+            );
+            const winner = sorted[0];
+            const winnerNumber = participants.indexOf(winner) + 1;
+            const secondPlace = sorted[1]?.votes || 0;
+            const delta = winner.votes - secondPlace;
+
+            return (
+                <div className="relative min-h-screen bg-black text-white overflow-hidden">
+                    <img src={winner.photoUrl} className="absolute inset-0 w-full h-full object-cover blur-2xl opacity-40" />
+                    <div className="absolute inset-0 bg-gradient-to-b from-black/80 via-black/60 to-black/90" />
+                    <Confetti />
+                    <div className="relative z-10 flex flex-col items-center justify-center min-h-screen text-center px-6 space-y-8">
+                        <div className="px-4 py-2 rounded-full bg-white/10 border border-white/20 text-sm uppercase tracking-[0.2em] font-bold">Победитель</div>
+                        <h1 className="text-4xl md:text-6xl font-black drop-shadow-lg">{sessionTitle}</h1>
+                        <div className="relative w-full max-w-3xl rounded-[32px] overflow-hidden shadow-2xl border border-white/10 bg-white/5 backdrop-blur">
+                            <img src={winner.photoUrl} className="w-full h-[70vh] object-cover" />
+                            <div className="absolute top-4 left-4 bg-blue-600 text-white px-4 py-2 rounded-full font-bold shadow-lg flex items-center gap-2"><Icon name="crown" /> № {winnerNumber}</div>
+                            <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/80 to-transparent p-8 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                                <div className="text-left">
+                                    <p className="text-sm uppercase tracking-[0.3em] text-blue-100 font-bold">Лидер голосования</p>
+                                    <div className="text-5xl font-black">{winner.votes} голосов</div>
+                                </div>
+                                <div className="flex gap-3">
+                                    <div className="px-5 py-3 rounded-2xl bg-white/10 border border-white/10 flex items-center gap-2 text-sm">
+                                        <Icon name="activity" /> Отрыв: {delta} голосов
+                                    </div>
+                                    <button onClick={() => window.location.hash = 'results'} className="px-6 py-3 rounded-2xl bg-blue-600 text-white font-bold shadow-lg flex items-center gap-2">
+                                        <Icon name="bar-chart-3" /> Таблица лидеров
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
         const App = () => {
             const [view, setView] = useState(AppView.ADMIN);
             const [participants, setParticipants] = useState([]);
-            const [votedId, setVotedId] = useState(null);
             const [sessionTitle, setSessionTitle] = useState('Конкурс 2024');
 
             useEffect(() => {
@@ -280,13 +414,12 @@
                     setParticipants(p.participants || []);
                     setSessionTitle(p.sessionTitle || 'Конкурс 2024');
                 }
-                const v = localStorage.getItem('gv_voted_v3');
-                if (v) setVotedId(v);
 
                 const handleHash = () => {
                     const h = window.location.hash;
                     if (h === '#vote') setView(AppView.VOTE);
                     else if (h === '#results') setView(AppView.LEADERBOARD);
+                    else if (h === '#winner') setView(AppView.WINNER);
                     else setView(AppView.ADMIN);
                 };
                 handleHash();
@@ -300,6 +433,8 @@
                         setTimeout(() => loader.remove(), 500);
                     }
                 }, 1000);
+
+                return () => window.removeEventListener('hashchange', handleHash);
             }, []);
 
             useEffect(() => {
@@ -307,11 +442,7 @@
             }, [participants, sessionTitle]);
 
             const handleVote = (id) => {
-                if (votedId) return;
                 setParticipants(prev => prev.map(x => x.id === id ? { ...x, votes: x.votes + 1 } : x));
-                setVotedId(id);
-                localStorage.setItem('gv_voted_v3', id);
-                window.location.hash = 'results';
             };
 
             return (
@@ -322,15 +453,16 @@
                             <span className="font-bold text-lg">LiveVote</span>
                         </div>
                         <div className="flex bg-gray-100 p-1 rounded-full gap-1">
-                            {[{v:AppView.ADMIN, l:'Админ', h:''}, {v:AppView.VOTE, l:'Голоса', h:'#vote'}, {v:AppView.LEADERBOARD, l:'Итоги', h:'#results'}].map(t=>(
+                            {[{v:AppView.ADMIN, l:'Админ', h:''}, {v:AppView.VOTE, l:'Голоса', h:'#vote'}, {v:AppView.LEADERBOARD, l:'Итоги', h:'#results'}, {v:AppView.WINNER, l:'Победитель', h:'#winner'}].map(t=>(
                                 <button key={t.v} onClick={()=>window.location.hash=t.h} className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all ${view === t.v ? 'bg-white shadow-sm text-blue-600' : 'text-gray-500'}`}>{t.l}</button>
                             ))}
                         </div>
                     </nav>
                     <main className="flex-grow">
-                        {view === AppView.ADMIN && <AdminView participants={participants} onAdd={(n, img) => setParticipants(p => [...p, { id: Date.now()+Math.random().toString(), name: n, photoUrl: img, votes: 0, aiDescription: '' }])} onDelete={id => setParticipants(p => p.filter(x => x.id !== id))} onReset={() => { if(confirm('Удалить всё?')) { setParticipants([]); setVotedId(null); localStorage.clear(); } }} sessionTitle={sessionTitle} setSessionTitle={setSessionTitle} updateAIInfo={(id, txt) => setParticipants(p => p.map(x => x.id === id ? { ...x, aiDescription: txt } : x))} />}
-                        {view === AppView.VOTE && <VoterView participants={participants} onVote={handleVote} hasVoted={!!votedId} sessionTitle={sessionTitle} />}
+                        {view === AppView.ADMIN && <AdminView participants={participants} onAdd={(n, img) => setParticipants(p => [...p, { id: Date.now()+Math.random().toString(), name: n, photoUrl: img, votes: 0, aiDescription: '' }])} onDelete={id => setParticipants(p => p.filter(x => x.id !== id))} onReset={() => { if(confirm('Удалить всё?')) { setParticipants([]); localStorage.clear(); } }} sessionTitle={sessionTitle} setSessionTitle={setSessionTitle} updateAIInfo={(id, txt) => setParticipants(p => p.map(x => x.id === id ? { ...x, aiDescription: txt } : x))} />}
+                        {view === AppView.VOTE && <VoterView participants={participants} onVote={handleVote} sessionTitle={sessionTitle} />}
                         {view === AppView.LEADERBOARD && <LeaderboardView participants={participants} sessionTitle={sessionTitle} />}
+                        {view === AppView.WINNER && <WinnerView participants={participants} sessionTitle={sessionTitle} />}
                     </main>
                     <footer className="p-8 text-center text-gray-400 text-[10px] font-bold uppercase tracking-widest border-t bg-white">Powered by Google Gemini</footer>
                 </div>
