@@ -424,7 +424,7 @@
                                     <p className="text-sm uppercase tracking-[0.3em] text-blue-100 font-bold">Лидер голосования</p>
                                     <div className="text-5xl font-black">{winner.votes} голосов</div>
                                 </div>
-                                <div className="flex gap-3">
+                                <div className="flex flex-wrap justify-center gap-3">
                                     <div className="px-5 py-3 rounded-2xl bg-white/10 border border-white/10 flex items-center gap-2 text-sm">
                                         <Icon name="activity" /> Отрыв: {delta} голосов
                                     </div>
@@ -444,17 +444,17 @@
 
         const App = () => {
             const [view, setView] = useState(AppView.ADMIN);
-            const [participants, setParticipants] = useState([]);
-            const [sessionTitle, setSessionTitle] = useState('Конкурс 2024');
+            const [savedState] = useState(() => {
+                try {
+                    return JSON.parse(localStorage.getItem('gv_v3')) || {};
+                } catch {
+                    return {};
+                }
+            });
+            const [participants, setParticipants] = useState(savedState.participants || []);
+            const [sessionTitle, setSessionTitle] = useState(savedState.sessionTitle || 'Конкурс 2024');
 
             useEffect(() => {
-                const data = localStorage.getItem('gv_v3');
-                if (data) {
-                    const p = JSON.parse(data);
-                    setParticipants(p.participants || []);
-                    setSessionTitle(p.sessionTitle || 'Конкурс 2024');
-                }
-
                 const handleHash = () => {
                     const h = window.location.hash;
                     if (h === '#vote') setView(AppView.VOTE);
