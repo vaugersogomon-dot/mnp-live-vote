@@ -84,6 +84,9 @@
             0% { transform: translate3d(0, -10vh, 0) rotate(0deg); }
             100% { transform: translate3d(0, 110vh, 0) rotate(260deg); }
         }
+        @media (prefers-reduced-motion: reduce) {
+            .confetti-piece { display: none; }
+        }
     </style>
 </head>
 <body>
@@ -142,11 +145,26 @@
             const ctx = canvas.getContext('2d');
             ctx.drawImage(img, 0, 0, width, height);
 
+            const encode = (quality) => canvas.toDataURL('image/jpeg', quality);
+            const dataUrlBytes = (value) => Math.ceil((value.length - value.indexOf(',') - 1) * 3 / 4);
             let quality = 0.9;
-            let output = canvas.toDataURL('image/jpeg', quality);
-            while (output.length * 0.75 > maxSize && quality > 0.4) { // rough base64->bytes conversion
-                quality -= 0.05;
-                output = canvas.toDataURL('image/jpeg', quality);
+            let output = encode(quality);
+
+            while (dataUrlBytes(output) > maxSize) {
+                if (quality > 0.45) {
+                    quality = Math.max(0.45, quality - 0.08);
+                } else {
+                    const resized = document.createElement('canvas');
+                    resized.width = Math.max(320, Math.round(canvas.width * 0.85));
+                    resized.height = Math.max(320, Math.round(canvas.height * 0.85));
+                    resized.getContext('2d').drawImage(canvas, 0, 0, resized.width, resized.height);
+                    canvas.width = resized.width;
+                    canvas.height = resized.height;
+                    canvas.getContext('2d').drawImage(resized, 0, 0);
+                    quality = 0.82;
+                }
+                output = encode(quality);
+                if (canvas.width <= 320 && canvas.height <= 320 && quality <= 0.45) break;
             }
             return output;
         };
@@ -261,6 +279,9 @@
         const VoterView = ({ participants, onVote, sessionTitle }) => {
             const [selected, setSelected] = useState(null);
             const [justVoted, setJustVoted] = useState(false);
+            const feedbackTimer = useRef(null);
+
+            useEffect(() => () => clearTimeout(feedbackTimer.current), []);
 
             if (!participants.length) {
                 return (
@@ -287,9 +308,15 @@
                         ))}
                     </div>
                     <div className="fixed bottom-10 left-0 right-0 px-6 flex justify-center z-50">
-                        <button disabled={!selected} onClick={() => { onVote(selected); setSelected(null); setJustVoted(true); setTimeout(() => setJustVoted(false), 2200); }} className={`w-full max-w-md py-5 rounded-full font-bold text-xl shadow-2xl transition-all ${selected ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-400'}`}>ГОЛОСОВАТЬ</button>
+                        <button disabled={!selected} onClick={() => {
+                            onVote(selected);
+                            setSelected(null);
+                            setJustVoted(true);
+                            clearTimeout(feedbackTimer.current);
+                            feedbackTimer.current = setTimeout(() => setJustVoted(false), 2200);
+                        }} className={`w-full max-w-md py-5 rounded-full font-bold text-xl shadow-2xl transition-all ${selected ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-400'}`}>ГОЛОСОВАТЬ</button>
                     </div>
-                    {justVoted && <div className="fixed bottom-28 left-0 right-0 flex justify-center">
+                    {justVoted && <div role="status" aria-live="polite" className="fixed bottom-28 left-0 right-0 flex justify-center z-50">
                         <div className="bg-white shadow-xl border px-4 py-2 rounded-full text-sm font-bold text-blue-600 flex items-center gap-2">
                             <Icon name="party-popper" /> Голос засчитан! Можно голосовать ещё раз
                         </div>
@@ -305,7 +332,11 @@
                 <div className="max-w-6xl mx-auto p-6 space-y-8 fade-in">
                     <div className="material-card p-10 flex flex-col md:flex-row items-center justify-between gap-6">
                         <div><p className="text-blue-600 font-bold text-xs uppercase mb-1">Live Результаты</p><h1 className="text-4xl font-bold">{sessionTitle}</h1></div>
-                        <div className="bg-gray-900 text-white px-8 py-4 rounded-3xl text-center"><div className="text-5xl font-bold">{total}</div><div className="text-[10px] opacity-50 uppercase font-bold mt-1">Голосов</div></div>
+                        <div className="flex flex-wrap items-center justify-center gap-3">
+                            <button onClick={() => window.location.hash = 'vote'} className="px-5 py-3 rounded-2xl bg-gray-100 font-bold flex items-center gap-2"><Icon name="vote" /> Голосование</button>
+                            <button onClick={() => window.location.hash = 'winner'} className="px-5 py-3 rounded-2xl bg-blue-600 text-white font-bold flex items-center gap-2"><Icon name="crown" /> Победитель</button>
+                            <div className="bg-gray-900 text-white px-8 py-4 rounded-3xl text-center"><div className="text-5xl font-bold">{total}</div><div className="text-[10px] opacity-50 uppercase font-bold mt-1">Голосов</div></div>
+                        </div>
                     </div>
                     <div className="grid lg:grid-cols-12 gap-8">
                         <div className="lg:col-span-5 space-y-4">
@@ -338,7 +369,9 @@
         const Confetti = () => {
             const containerRef = useRef(null);
             useEffect(() => {
+                if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
                 const colors = ['#4285F4', '#EA4335', '#FBBC05', '#34A853'];
+                const cleanupTimers = [];
                 const spawn = () => {
                     if (!containerRef.current) return;
                     const piece = document.createElement('div');
@@ -348,11 +381,15 @@
                     piece.style.animationDuration = 3 + Math.random() * 2 + 's';
                     piece.style.opacity = Math.random() * 0.8 + 0.2;
                     containerRef.current.appendChild(piece);
-                    setTimeout(() => piece.remove(), 5000);
+                    cleanupTimers.push(setTimeout(() => piece.remove(), 5000));
                 };
                 const interval = setInterval(spawn, 80);
                 for (let i = 0; i < 80; i++) spawn();
-                return () => clearInterval(interval);
+                return () => {
+                    clearInterval(interval);
+                    cleanupTimers.forEach(clearTimeout);
+                    if (containerRef.current) containerRef.current.replaceChildren();
+                };
             }, []);
             return <div ref={containerRef} className="confetti-container pointer-events-none"></div>;
         };
@@ -391,6 +428,9 @@
                                     <div className="px-5 py-3 rounded-2xl bg-white/10 border border-white/10 flex items-center gap-2 text-sm">
                                         <Icon name="activity" /> Отрыв: {delta} голосов
                                     </div>
+                                    <button onClick={() => window.location.hash = 'vote'} className="px-6 py-3 rounded-2xl bg-white/10 border border-white/10 text-white font-bold flex items-center gap-2">
+                                        <Icon name="vote" /> Голосование
+                                    </button>
                                     <button onClick={() => window.location.hash = 'results'} className="px-6 py-3 rounded-2xl bg-blue-600 text-white font-bold shadow-lg flex items-center gap-2">
                                         <Icon name="bar-chart-3" /> Таблица лидеров
                                     </button>
